@@ -1,0 +1,14 @@
+ID_BBS,ID_CAN,name
+04,AB,Alberta
+11,BC,British Columbia
+43,NT,Northwest Territories
+45,MB,Manitoba
+56,NB,New Brunswick
+57,NL,Newfoundland and Labrador
+62,NU,Nunavut
+65,NS,Nova Scotia
+68,ON,Ontario
+75,PE,Prince Edward Island
+76,QC,Quebec
+79,SK,Saskatchewan
+93,YT,Yukon

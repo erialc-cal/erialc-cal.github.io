@@ -1,0 +1,101 @@
+---
+title: "Did the Canadian wildfires have an effect on bird migration?"
+author: "Claire"
+date: "2023-09-18"
+output: html_document
+---
+
+```{r libraries, include=FALSE, echo=FALSE}
+library(dplyr)
+library(tidyverse)
+library(broom)
+library(ggplot2)
+library(viridis)
+library(hrbrthemes)
+library(plotly)
+```
+
+
+
+```{r get data, echo=FALSE}
+wildfires0 <- read.table(paste0(dirname(getwd()), '/data/NFDB_point_txt/NFDB_point_20220901.txt'), sep=",",fill=TRUE,quote = "", header=TRUE)
+bird0 <- read.csv(paste0(dirname(getwd()), '/data/Complete_data.csv'))
+```
+
+
+## Baseline model
+
+We set up a basic linear model to evaluate the impact of wildfires on species abundance among migrating species. 
+We match up the years and states that we need on both datasets. And only collect years in which we see a wildfire occurring at breeding season (May-June-July). Since the wildfire data covers Canadian states, we'll keep those only. 
+```{r match data, echo=FALSE}
+key_table <- read.table(paste0(dirname(getwd()), '/data/NFDB_point_txt/id_key.txt'), header=TRUE, sep = ',')
+# Get breeding season
+wildfires <- wildfires0[wildfires0$MONTH %in% c(5:7),]
+# Match up the years
+wildfires <- wildfires[wildfires$YEAR %in% unique(bird0$Year),]
+wildfires <- wildfires[wildfires$SRC_AGY2 %in% unique(key_table$ID_CAN),]
+
+bird <- bird0[bird0$Year %in% unique(wildfires$YEAR),]
+# Match up states 
+bird <- bird[bird$StateNum %in% key$ID_BBS,]
+```
+
+
+First model: aggregated across all species, $\mathtt{bird\_pop}_{\mathtt{year, state}} \sim \beta_0 + \beta_1 \mathtt{wildfire}_{\mathtt{year, state}}$. 
+
+
+
+```{r bird pop plot, echo=FALSE}
+bird_pop <- bird %>%
+  group_by(Year, StateNum) %>%
+    summarise(tot = sum(SpeciesTotal)) %>%
+      full_join(key_table,by=c("StateNum"="ID_BBS"))
+ggplot(bird_pop, aes(x=Year, y=tot, group=factor(StateNum), color=factor(name))) +
+    geom_line() + scale_color_viridis(discrete = TRUE) +ggtitle('All species across Canadian states from 1966 to 2021')+theme_ipsum() + xlab("Year") +ylab("Species count (total)")
+```
+
+
+```{r wildfires plot, echo=FALSE}
+wildfires$SIZE_HA <- as.numeric(wildfires$SIZE_HA)
+fires_per_year <- wildfires %>% 
+  group_by(YEAR, SRC_AGY2) %>% 
+    summarise(inc = sum(SIZE_HA)) %>%
+      full_join(key_table,by=c("SRC_AGY2"="ID_CAN"))
+
+ggplot(fires_per_year, aes(x=YEAR, y=inc, group=factor(SRC_AGY2), color=factor(name))) +
+    geom_point() + scale_color_viridis(discrete = TRUE) +ggtitle('All incidence of fires across Canadian states from 1966 to 2021')+xlab('Year')+ylab('Fire incidence')+theme_ipsum()
+```
+```{r}
+combined_table <- bird_pop %>% full_join(fires_per_year, by= c("Year"="YEAR", "ID_CAN"="SRC_AGY2"))
+combined_table$inc[is.na(combined_table$inc)] <- 0
+```
+
+
+```{r model}
+linear_model <- lm(data=combined_table, tot ~ inc +factor(ID_CAN)+ Year)
+summary(linear_model)
+```
+```{r}
+plot(linear_model)
+save.image('/Users/clairehe/Desktop/phd year 2/ADS_TA_template/proj1/week3/img.png') 
+```
+Non linearity problem. Trend has almost a quadratic curve. 
+
+```{r}
+linear_model2 <- lm(data=combined_table, tot ~ inc*factor(ID_CAN)+Year)
+summary(linear_model2)
+anova(linear_model2, linear_model)
+```
+
+
+```{r}
+plot_ly(x=combined_table$inc, y=combined_table$tot, z=combined_table$Year, type="scatter3d", mode="markers", color=combined_table$name.y) %>%  layout(scene = list(xaxis = list(title = 'fire incidence'),
+                     yaxis = list(title = 'Species total count'),
+                     zaxis = list(title = 'Year')))
+```
+
+```{r}
+ggplot(combined_table[combined_table$Year == '2013',], aes(x=inc, y=tot, color=factor(name.y))) +geom_point()+xlab('Fire incidence')+ylab('Total species count for year 2013')+theme_ipsum()
+ggplot(combined_table, aes(x=inc, y=tot, color=factor(name.y))) +geom_point()+xlab('Fire incidence')+ylab('Total species count')+theme_ipsum()
+ggplot(combined_table[combined_table$ID_CAN=='NL',], aes(x=inc, y=tot)) +geom_point()+xlab('Fire incidence')+ylab('Total species count in Newfoundland and Labrador')+theme_ipsum() 
+```
